@@ -17,7 +17,7 @@ mod elf;
 mod paging;
 mod platform;
 
-use common_structures::KernelHeader;
+use common_structures::{KernelHeader, config};
 
 /// Used by the [panic_handler()] to print error messages
 static mut STDOUT: *mut Output = core::ptr::null_mut();
@@ -125,6 +125,9 @@ extern "efiapi" fn efi_main(img_handle: Handle, system_table: SystemTable<Boot>)
     // free the raw kernel image as we only need the prepared image from now on
     allocator::free(&system_table, kernel_image.data, kernel_image.size as usize);
 
+    // allocate a stack for the kernel
+    let kernel_stack = allocator::allocate(&system_table, config::KERNEL_STACK_SIZE as usize, MemoryType::LOADER_DATA);
+
     write!(system_table.stdout(), "Starting kernel...\r\n").unwrap();
 
     // Calculate the space needed to retrieve the UEFI memory map.
@@ -146,9 +149,7 @@ extern "efiapi" fn efi_main(img_handle: Handle, system_table: SystemTable<Boot>)
     let (_system_table_runtime, _memory_map) = system_table.exit_boot_services(img_handle, unsafe{slice::from_raw_parts_mut(mmap_buffer, mmap_pages * 4096)}).expect("Failed to exit boot services").split().1;
 
     // Jump to the kernel
-    platform::goto_entrypoint(kernel_header, entry_point);
-
-    Status::LOAD_ERROR
+    platform::goto_entrypoint(kernel_header, entry_point, kernel_stack);
 }
 
 /// Will be called by functions like panic!(), expect(), unwrap(), etc. when errors occur.
