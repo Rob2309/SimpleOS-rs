@@ -5,6 +5,8 @@ use core::{panic::PanicInfo, slice};
 
 include!("../../common-structures/kernel_header.rs");
 
+/// The kernel entry point.
+/// This function will be called by the bootloader after preparing the environment.
 #[no_mangle]
 extern "C" fn _start(kernel_header: *const KernelHeader) -> ! {
     let kh = unsafe{&*kernel_header};
@@ -26,7 +28,9 @@ extern "C" fn _start(kernel_header: *const KernelHeader) -> ! {
     }
 }
 
+/// Will be called by functions like panic!(), expect(), unwrap(), etc. when errors occur.
 #[panic_handler]
 fn panic_handler(_info: &PanicInfo) -> ! {
+    // Since we have no printing functionality yet, we just loop and cry :(
     loop {}
 }

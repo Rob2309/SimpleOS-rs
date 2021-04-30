@@ -1,5 +1,6 @@
 use core::{mem::size_of, slice};
 
+/// Calculates the required buffer size for preparing the given ELF image.
 pub fn get_size(image: *const u8) -> usize {
     let header = unsafe { &*(image as *const Header) };
 
@@ -18,6 +19,7 @@ pub fn get_size(image: *const u8) -> usize {
     size
 }
 
+/// Compares two null-terminated strings
 #[cfg(debug_assertions)]
 unsafe fn strcmp(mut a: *const u8, mut b: *const u8) -> bool {
     while *a == *b {
@@ -32,6 +34,7 @@ unsafe fn strcmp(mut a: *const u8, mut b: *const u8) -> bool {
     false
 }
 
+/// Returns the virtual address of the `.text` section of the given ELF image.
 #[cfg(debug_assertions)]
 pub fn get_text_addr(image: *const u8, process: *const u8) -> u64 {
     let header = unsafe { &*(image as *const Header) };
@@ -51,6 +54,8 @@ pub fn get_text_addr(image: *const u8, process: *const u8) -> u64 {
     0
 }
 
+/// Prepares a given `image` into the `dest` buffer by
+/// resolving relocations, expanding zero-padded segments, etc.
 pub fn prepare(image: *const u8, dest: *mut u8) -> u64 {
     let header = unsafe { &*(image as *const Header) };
 

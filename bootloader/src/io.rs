@@ -3,11 +3,18 @@ use uefi::proto::media::file::File;
 
 use crate::allocator;
 
+/// Contains information about a file loaded by [`read_file()`].
 pub struct FileData {
+    /// Size in bytes of the loaded file buffer.
     pub size: u64,
+    /// Buffer containing the bytes of the loaded file.
     pub data: *mut u8,
 }
 
+/// Reads a file from the given `path`.
+/// 
+/// # Notes
+/// `path` should use `\` as path separator
 pub fn read_file(system_table: &SystemTable<Boot>, path: &str) -> FileData {
     let mut volume;
     unsafe {
