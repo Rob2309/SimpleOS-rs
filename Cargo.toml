@@ -2,4 +2,5 @@
 members = [
     "bootloader",
     "kernel",
+    "common-structures",
 ]

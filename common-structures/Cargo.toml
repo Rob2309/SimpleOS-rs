@@ -1,10 +1,8 @@
 [package]
-name = "kernel"
+name = "common-structures"
 version = "0.1.0"
-authors = ["Robin Quint <rob2309@hotmail.de>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-common-structures = { path="../common-structures" }

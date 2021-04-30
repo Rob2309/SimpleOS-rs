@@ -1,5 +1,6 @@
 use core::slice;
 
+use common_structures::PagingInfo;
 use uefi::table::{Boot, SystemTable, boot::{AllocateType, MemoryType}};
 
 use core::fmt::Write;
@@ -39,7 +40,7 @@ mod platform {
     /// Initializes a page table that contains an identity mapping of physical memory
     /// in the lower memory half (0x0000000000000000 - 0x00007FFFFFFFFFFF) as well as the same mapping in the
     /// higher memory half (0xFFFFXXXXXXXXXXXX - 0xFFFFFFFFFFFFFFFF). 
-    pub fn init(system_table: &SystemTable<Boot>, mut physical_size: u64) {
+    pub fn init(system_table: &SystemTable<Boot>, mut physical_size: u64, paging_info: &mut PagingInfo) {
         write!(system_table.stdout(), "Memory ranges from 0 to {:016X}\r\n", physical_size).unwrap();
 
         /*
@@ -120,6 +121,10 @@ mod platform {
             write!(system_table.stdout(), "High memory start: {:#016X}\r\n", HIGH_MEM_BASE).unwrap();
         }
 
+        paging_info.page_buffer = page_buffer_ptr;
+        paging_info.pdp_pages = pdp_pages;
+        paging_info.pd_pages = pd_pages;
+
         // The CR3 register holds the physical address of the PML4 Table.
         // When written to, all TLB entries are invalidated automatically.
         unsafe{asm!(
@@ -140,7 +145,7 @@ pub use platform::ptr_to_kernelspace;
 
 /// Initializes the platform dependent paging mechanism.
 /// See [`platform::init()`] for more info.
-pub fn init(system_table: &SystemTable<Boot>) {
+pub fn init(system_table: &SystemTable<Boot>, paging_info: &mut PagingInfo) {
     // retrieve the UEFI memory map.
     let mmap_pages = (system_table.boot_services().memory_map_size() + 4095) / 4096 + 1;
     let mmap_buffer = system_table.boot_services().allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, mmap_pages).expect("Failed to allocate space for memory map").split().1 as *mut u8;
@@ -160,7 +165,7 @@ pub fn init(system_table: &SystemTable<Boot>) {
     }
 
     // call the platform dependent init function.
-    platform::init(system_table, physical_size);
+    platform::init(system_table, physical_size, paging_info);
 
     // free the memory map buffer.
     let _ = system_table.boot_services().free_pages(mmap_buffer as u64, mmap_pages).expect("Failed to free memory map buffer");

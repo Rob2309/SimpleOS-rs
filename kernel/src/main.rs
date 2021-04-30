@@ -3,7 +3,7 @@
 
 use core::{panic::PanicInfo, slice};
 
-include!("../../common-structures/kernel_header.rs");
+use common_structures::KernelHeader;
 
 /// The kernel entry point.
 /// This function will be called by the bootloader after preparing the environment.

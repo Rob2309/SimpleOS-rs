@@ -8,4 +8,4 @@ edition = "2018"
 
 [dependencies]
 uefi = "*"
-uefi-services = "*"
+common-structures = { path="../common-structures" }

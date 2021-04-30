@@ -17,7 +17,7 @@ mod elf;
 mod paging;
 mod platform;
 
-include!("../../common-structures/kernel_header.rs");
+use common_structures::KernelHeader;
 
 /// Used by the [panic_handler()] to print error messages
 static mut STDOUT: *mut Output = core::ptr::null_mut();
@@ -60,7 +60,7 @@ extern "efiapi" fn efi_main(img_handle: Handle, system_table: SystemTable<Boot>)
     // initialize page tables so that the higher memory half mirrors the lower half.
     // Since we want the kernel to be located in the higher memory half, but the UEFI page table
     // will contain only an identity mapping (virtual address == physical address), we have to clone this mapping to the higher memory half.
-    paging::init(&system_table);
+    paging::init(&system_table, &mut kernel_header.paging_info);
 
     // convert kernel_header address to the corresponding higher memory half address,
     // so that the kernel can use the header.
