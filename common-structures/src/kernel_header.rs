@@ -15,14 +15,19 @@ pub struct KernelHeader {
     // Platform dependent Page Table information
     pub paging_info: PagingInfo,
 
+    /// array containing the physical memory layout
     pub memory_map: *mut MemorySegment,
+    /// number of entries in the memory_map
     pub memory_map_entries: u64,
 }
 
 #[repr(C)]
 pub struct MemorySegment {
+    /// physical address of the segment
     pub start: u64,
+    /// number of 4096-byte pages in the segment
     pub page_count: u64,
+    /// Whether or not the segment is free to be used
     pub state: MemorySegmentState,
 }
 
