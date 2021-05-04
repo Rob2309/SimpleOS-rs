@@ -14,6 +14,22 @@ pub struct KernelHeader {
 
     // Platform dependent Page Table information
     pub paging_info: PagingInfo,
+
+    pub memory_map: *mut MemorySegment,
+    pub memory_map_entries: u64,
+}
+
+#[repr(C)]
+pub struct MemorySegment {
+    pub start: u64,
+    pub page_count: u64,
+    pub state: MemorySegmentState,
+}
+
+#[repr(C)]
+pub enum MemorySegmentState {
+    Free,
+    Occupied,
 }
 
 #[cfg(target_arch="x86_64")]

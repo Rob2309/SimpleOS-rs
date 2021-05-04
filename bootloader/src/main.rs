@@ -17,7 +17,7 @@ mod elf;
 mod paging;
 mod platform;
 
-use common_structures::{KernelHeader, config};
+use common_structures::{KernelHeader, MemorySegment, MemorySegmentState, config};
 
 /// Used by the [panic_handler()] to print error messages
 static mut STDOUT: *mut Output = core::ptr::null_mut();
@@ -134,8 +134,9 @@ extern "efiapi" fn efi_main(img_handle: Handle, system_table: SystemTable<Boot>)
     // Add one page for safety, as the allocation of the memory map buffer might
     // grow the memory map, resulting in more space being needed to retrieve the memory map.
     let mmap_pages = (system_table.boot_services().memory_map_size() + 4095) / 4096 + 1;
-    // Allocate buffer for retrieving the memory map.
-    let mmap_buffer = system_table.boot_services().allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, mmap_pages).expect("Failed to allocate mmap buffer").split().1 as *mut u8;
+    // Allocate buffer for retrieving the memory map (reserve twice the required size, 
+    // we will need the second buffer for converting to kernel_header format).
+    let mmap_buffer = system_table.boot_services().allocate_pages(AllocateType::AnyPages, MemoryType::LOADER_DATA, mmap_pages * 2).expect("Failed to allocate mmap buffer").split().1 as *mut u8;
     // ensure that the buffer allocation didn't grow the memory map too much (should never happen)
     let mmap_pages_2 = (system_table.boot_services().memory_map_size() + 4095) / 4096;
     if mmap_pages_2 > mmap_pages {
@@ -146,7 +147,29 @@ extern "efiapi" fn efi_main(img_handle: Handle, system_table: SystemTable<Boot>)
     // exit_boot_services makes the UEFI boot services unavailable, so e.g. memory allocations have to be handled manually.
     // It also stops the so called WatchDog timer, which is around 5 minutes. When this timer runs out before exit_boot_services is called,
     // the firmware will assume that the bootloader is stuck and kill it.
-    let (_system_table_runtime, _memory_map) = system_table.exit_boot_services(img_handle, unsafe{slice::from_raw_parts_mut(mmap_buffer, mmap_pages * 4096)}).expect("Failed to exit boot services").split().1;
+    let (_system_table_runtime, uefi_memory_map) = system_table.exit_boot_services(img_handle, unsafe{slice::from_raw_parts_mut(mmap_buffer, mmap_pages * 4096)}).expect("Failed to exit boot services").split().1;
+
+    // pre-save the memory map entry count, as len() returns the *remaining* entries
+    let memory_map_entries = uefi_memory_map.len();
+    let memory_map = unsafe{slice::from_raw_parts_mut(mmap_buffer.offset(mmap_pages as isize * 4096) as *mut MemorySegment, memory_map_entries)};
+
+    for (i, entry) in uefi_memory_map.enumerate() {
+        memory_map[i] = MemorySegment {
+            start: entry.phys_start,
+            page_count: entry.page_count,
+            state: match entry.ty {
+                // after entering the kernel, memory reserved for the bootloader code and uefi boot services are no longer needed.
+                MemoryType::BOOT_SERVICES_CODE | 
+                MemoryType::BOOT_SERVICES_DATA | 
+                MemoryType::CONVENTIONAL | 
+                MemoryType::LOADER_CODE => MemorySegmentState::Free,
+                _ => MemorySegmentState::Occupied,
+            },
+        };
+    }
+
+    kernel_header.memory_map = memory_map.as_mut_ptr();
+    kernel_header.memory_map_entries = memory_map_entries as u64;
 
     // Jump to the kernel
     platform::goto_entrypoint(kernel_header, entry_point, kernel_stack);
