@@ -1,7 +1,11 @@
-use std::{env, fs, io::{self, Seek}, process::Command};
+use std::{env, fs, io::{self, Seek}, process::{Command, exit}};
 
 const CARGO: &str = env!("CARGO");
 const ROOT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
+
+fn print_usage() {
+    println!("Usage: cargo osbuild [--target=TARGET] [--release]");
+}
 
 fn main() {
     let mut arch = "x86_64".to_owned();
@@ -12,6 +16,9 @@ fn main() {
             arch = arg[9..].to_owned();
         } else if arg == "--release" {
             release_mode = true;
+        } else if arg == "--help" || arg == "-h" {
+            print_usage();
+            exit(0);
         }
     }
 
