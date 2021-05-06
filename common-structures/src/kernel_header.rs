@@ -32,6 +32,7 @@ pub struct MemorySegment {
 }
 
 #[repr(C)]
+#[derive(PartialEq, Eq)]
 pub enum MemorySegmentState {
     Free,
     Occupied,

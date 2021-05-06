@@ -4,12 +4,18 @@
 use core::{panic::PanicInfo, slice};
 
 use common_structures::KernelHeader;
+use memory::PhysMemoryManager;
+
+mod mutex;
+mod memory;
 
 /// The kernel entry point.
 /// This function will be called by the bootloader after preparing the environment.
 #[no_mangle]
 extern "C" fn _start(kernel_header: *const KernelHeader) -> ! {
     let kh = unsafe{&*kernel_header};
+
+    PhysMemoryManager::init(kh);
 
     let pixels = unsafe { slice::from_raw_parts_mut(kh.screen_buffer, kh.screen_scanline_width as usize * kh.screen_height as usize * 4) };
 
