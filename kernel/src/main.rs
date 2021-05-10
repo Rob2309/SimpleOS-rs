@@ -6,7 +6,6 @@
 use core::slice;
 
 use common_structures::KernelHeader;
-use memory::PhysMemoryManager;
 
 mod mutex;
 mod memory;
@@ -17,7 +16,7 @@ mod memory;
 extern "C" fn _start(kernel_header: *const KernelHeader) -> ! {
     let kh = unsafe{&*kernel_header};
 
-    PhysMemoryManager::init(kh);
+    memory::init_phys_manager(kh);
 
     let pixels = unsafe { slice::from_raw_parts_mut(kh.screen_buffer, kh.screen_scanline_width as usize * kh.screen_height as usize * 4) };
 
