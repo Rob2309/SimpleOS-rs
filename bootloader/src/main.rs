@@ -1,5 +1,5 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 #![feature(abi_efiapi)]
 #![feature(option_result_unwrap_unchecked)]
 #![feature(panic_info_message)]
@@ -176,8 +176,8 @@ extern "efiapi" fn efi_main(img_handle: Handle, system_table: SystemTable<Boot>)
 }
 
 /// Will be called by functions like panic!(), expect(), unwrap(), etc. when errors occur.
-#[panic_handler]
-fn panic_handler(info: &PanicInfo) -> ! {
+#[cfg_attr(not(test), panic_handler)]
+pub fn panic_handler(info: &PanicInfo) -> ! {
     let stdout = unsafe { &mut *STDOUT };
 
     // explicitly ignore Result since panicking in a panic handler seems hysterical

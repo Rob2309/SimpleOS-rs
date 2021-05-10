@@ -1,7 +1,9 @@
-#![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_main)]
 
-use core::{panic::PanicInfo, slice};
+#![feature(maybe_uninit_extra)]
+
+use core::slice;
 
 use common_structures::KernelHeader;
 use memory::PhysMemoryManager;
@@ -35,8 +37,8 @@ extern "C" fn _start(kernel_header: *const KernelHeader) -> ! {
 }
 
 /// Will be called by functions like panic!(), expect(), unwrap(), etc. when errors occur.
-#[panic_handler]
-fn panic_handler(_info: &PanicInfo) -> ! {
+#[cfg_attr(not(test), panic_handler)]
+pub fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
     // Since we have no printing functionality yet, we just loop and cry :(
     loop {}
 }

@@ -1,79 +1,127 @@
-use core::{mem::MaybeUninit, ops::Deref, slice};
+use core::{mem::MaybeUninit, slice, ptr::null_mut};
+use core::cell::UnsafeCell;
 
-use common_structures::{KernelHeader, MemorySegmentState};
+use common_structures::{KernelHeader, MemorySegment, MemorySegmentState};
 
 use crate::mutex::{Lock, SpinLock};
 
+const MAX_ORDER: usize = 8;
 
-pub struct PhysMemoryManager {
-    page_map: SpinLock<*mut [u64]>,
+pub trait PhysManagerStorage {
+    fn new(num_pages: u64, memory_map: &mut [MemorySegment]) -> Self;
+    fn get_buddy_map(&mut self) -> &mut [u64];
+    fn get_entry(&mut self, index: u64) -> *mut FreeEntry;
+}
+
+pub struct PhysMemoryManager<Storage: PhysManagerStorage = InlineStorage> {
+    lock: SpinLock,
+    free_lists: UnsafeCell<[*mut FreeEntry; MAX_ORDER+1]>,
+    storage: UnsafeCell<Storage>,
+}
+
+struct FreeEntry {
+    order: usize,
+    next: *mut FreeEntry,
+    prev: *mut FreeEntry,
+}
+
+struct InlineStorage {
+    buddy_map: *mut [u64],
+}
+
+impl PhysManagerStorage for InlineStorage {
+    fn new(num_pages: u64, memory_map: &mut [MemorySegment]) -> Self {
+        let num_entries = (num_pages + 63) / 64;
+        let num_storage_pages = (num_entries * 8 + 4095) / 4096;
+
+        let buddy_map = {
+            let entry = memory_map.iter()
+                .find(|&entry| entry.state == MemorySegmentState::Free && entry.page_count >= num_storage_pages)
+                .expect("No suitable memory location found for buddy map");
+            
+            let res = entry.start;
+            entry.start += num_storage_pages * 4096;
+            entry.page_count -= num_storage_pages;
+            
+            unsafe { slice::from_raw_parts_mut(res as *mut u64, num_entries as usize) as *mut [u64] }
+        };
+
+        unsafe {
+            (*buddy_map).fill(0);
+        }
+
+        Self {
+            buddy_map,
+        }
+    }
+
+    fn get_buddy_map(&mut self) -> &mut [u64] {
+        unsafe { &mut *self.buddy_map }
+    }
+
+    fn get_entry(&mut self, index: u64) -> *mut FreeEntry {
+        (index << 12) as *mut FreeEntry
+    }
 }
 
 static mut INSTANCE: MaybeUninit<PhysMemoryManager> = MaybeUninit::uninit();
 
-impl PhysMemoryManager {
-    pub fn init(kernel_header: &KernelHeader) {
-        let max_address = {
-            let mut tmp = 0;
-            for i in 0..kernel_header.memory_map_entries {
-                let entry = unsafe{&*kernel_header.memory_map.offset(i as isize)};
-                if entry.start + entry.page_count * 4096 > tmp {
-                    tmp = entry.start + entry.page_count * 4096;
-                }
-            }
-            tmp
-        };
+pub fn init(kernel_header: &KernelHeader) {
+    unsafe {
+        INSTANCE.write(PhysMemoryManager::new(slice::from_raw_parts_mut(kernel_header.memory_map, kernel_header.memory_map_entries as usize)));
+    }
+}
 
-        let max_page = max_address / 4096;
-        let entry_count = (max_page + 63) / 64;
-        let page_count = (entry_count + 511) / 512;
+pub fn phys_manager() -> &'static PhysMemoryManager {
+    unsafe {
+        &*INSTANCE.as_mut_ptr()
+    }
+}
 
-        let page_map_addr = {
-            let mut tmp = None;
-            for i in 0..kernel_header.memory_map_entries {
-                let entry = unsafe{&mut *kernel_header.memory_map.offset(i as isize)};
-                if entry.state == MemorySegmentState::Free && entry.page_count >= page_count {
-                    tmp = Some(entry.start);
-                    entry.start += page_count * 4096;
-                    entry.page_count -= page_count;
-                    break;
-                }
-            }
-            tmp.expect("No suitable location for kernel physical memory map found") as *mut u64
-        };
+unsafe impl<Storage: PhysManagerStorage> Sync for PhysMemoryManager<Storage> {}
+unsafe impl<Storage: PhysManagerStorage> Send for PhysMemoryManager<Storage> {}
 
-        let page_map = unsafe{slice::from_raw_parts_mut(page_map_addr, entry_count as usize)};
+impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
+    pub fn new(memory_map: &mut [MemorySegment]) -> Self {
+        let max_address = memory_map.iter()
+            .map(|entry| entry.start + entry.page_count * 4096)
+            .max().expect("Memory Map is empty");
 
-        unsafe {
-            INSTANCE = MaybeUninit::new(Self {
-                page_map: SpinLock::new(page_map),
-            });
-        }
+        let storage = Storage::new(max_address >> 12, memory_map).into();
 
-        for i in 0..kernel_header.memory_map_entries {
-            let entry = unsafe{&mut *kernel_header.memory_map.offset(i as isize)};
-            if entry.state == MemorySegmentState::Free {
-                for p in 0..entry.page_count {
-                    Self::get().free_page(entry.start + p * 4096);
-                }
-            }
+        Self {
+            lock: SpinLock::new(),
+            free_lists: [null_mut(); MAX_ORDER+1].into(),
+            storage,
         }
     }
 
-    pub fn get() -> &'static Self {
-        unsafe {
-            &*INSTANCE.as_ptr()
-        }
+    fn free_buddy(buddy_map: &mut [u64], free_lists: &mut [*mut FreeEntry], index: u64, order: u32) {
+
+    }
+
+    fn alloc_buddy(buddy_map: &mut [u64], free_lists: &mut [*mut FreeEntry], order: u32) -> u64 {
+        0
     }
 
     pub fn free_page(&self, addr: u64) {
-        let page_index = addr / 4096;
-        let entry_index = page_index / 64;
-        let bit_index = page_index % 64;
+        let guard = self.lock.lock();
+        let buddy_map = self.storage.get_mut().get_buddy_map();
+        let free_lists = self.free_lists.get_mut();
 
-        unsafe {
-            (&mut **self.page_map.lock())[entry_index as usize] |= 1 << bit_index;
-        }
+        Self::free_buddy(buddy_map, free_lists, addr >> 12, 0);
     }
 
+    pub fn alloc_page(&self) -> u64 {
+        let guard = self.lock.lock();
+        let buddy_map = self.storage.get_mut().get_buddy_map();
+        let free_lists = self.free_lists.get_mut();
+
+        Self::alloc_buddy(buddy_map, free_lists, 0)
+    }
+}
+
+pub mod api {
+    pub use super::phys_manager;
+    pub use super::init as init_phys_manager;
 }
