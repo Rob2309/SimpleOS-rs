@@ -5,3 +5,7 @@ members = [
     "common-structures",
     "builder",
 ]
+
+[profile.release]
+lto = true
+opt-level = 3

@@ -94,10 +94,33 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
 
         let storage = Storage::new(max_address >> 12, memory_map).into();
 
-        Self {
+        let res = Self {
             lock: SpinLock::new(),
             free_lists: [null_mut(); MAX_ORDER+1].into(),
             storage,
+        };
+
+        for entry in memory_map.iter().filter(|&e| e.state == MemorySegmentState::Free) {
+            res.add_region(entry.start >> 12, entry.page_count);
+        }
+
+        res
+    }
+
+    fn add_region(&self, mut index: u64, mut page_count: u64) {
+        let _guard = self.lock.lock();
+        let storage = unsafe{&mut *self.storage.get()};
+        let free_lists = unsafe{&mut *self.free_lists.get()};
+
+        while page_count > 0 {
+            let index_order = index.trailing_zeros();
+            let count_order = 63 - page_count.leading_zeros();
+            let order = index_order.min(count_order).min(MAX_ORDER as u32);
+
+            Self::free_block(storage, free_lists, index, order);
+
+            index += 1 << order;
+            page_count -= 1 << order;
         }
     }
 
@@ -107,6 +130,15 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
 
     fn get_combined_index(index: u64, order: u32) -> u64 {
         index & !(1 << order)
+    }
+
+    fn get_size_order(count: u64) -> u32 {
+        let order = 63 - count.leading_zeros();
+        if count & (1 << order) != count {
+            order + 1
+        } else {
+            order
+        }
     }
 
     fn remove_buddy_list_entry(head: &mut *mut FreeEntry, entry: *mut FreeEntry) {
@@ -150,7 +182,7 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
     fn free_block(storage: &mut Storage, free_lists: &mut [*mut FreeEntry], index: u64, order: u32) {
         let entry = index / 64;
         let bit = index % 64;
-        let entry_ptr = storage.get_entry(entry);
+        let entry_ptr = storage.get_entry(index);
 
         let buddy_index = Self::get_buddy_index(index, order);
         let buddy_entry = buddy_index / 64;
@@ -159,7 +191,7 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
 
         let buddy_map = storage.get_buddy_map();
 
-        if buddy_map[buddy_entry as usize] & (1 << buddy_bit) != 0 && unsafe{ (*buddy_ptr).order == order as usize } {
+        if order < MAX_ORDER as u32 && buddy_map[buddy_entry as usize] & (1 << buddy_bit) != 0 && unsafe{ (*buddy_ptr).order == order as usize } {
             buddy_map[buddy_entry as usize] &= !(1 << buddy_bit);
             Self::remove_buddy_list_entry(&mut free_lists[order as usize], buddy_ptr);
             Self::free_block(storage, free_lists, Self::get_combined_index(index, order), order+1);
@@ -220,12 +252,48 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
         Self::free_block(storage, free_lists, addr >> 12, 0);
     }
 
+    pub fn free_linear_pages(&self, addr: u64, count: u64) {
+        let _guard = self.lock.lock();
+        let storage = unsafe{&mut *self.storage.get()};
+        let free_lists = unsafe{&mut *self.free_lists.get()};
+
+        Self::free_block(storage, free_lists, addr >> 12, Self::get_size_order(count));
+    }
+
+    pub fn free_pages(&self, addresses: &[u64]) {
+        let _guard = self.lock.lock();
+        let storage = unsafe{&mut *self.storage.get()};
+        let free_lists = unsafe{&mut *self.free_lists.get()};
+
+        for addr in addresses {
+            Self::free_block(storage, free_lists, addr >> 12, 0);
+        }
+    }
+
     pub fn alloc_page(&self) -> u64 {
         let _guard = self.lock.lock();
         let storage = unsafe{&mut *self.storage.get()};
         let free_lists = unsafe{&mut *self.free_lists.get()};
 
         Self::alloc_block(storage, free_lists, 0) << 12
+    }
+
+    pub fn alloc_linear_pages(&self, count: u64) -> u64 {
+        let _guard = self.lock.lock();
+        let storage = unsafe{&mut *self.storage.get()};
+        let free_lists = unsafe{&mut *self.free_lists.get()};
+
+        Self::alloc_block(storage, free_lists, Self::get_size_order(count)) << 12
+    }
+
+    pub fn alloc_pages(&self, addresses: &mut [u64]) {
+        let _guard = self.lock.lock();
+        let storage = unsafe{&mut *self.storage.get()};
+        let free_lists = unsafe{&mut *self.free_lists.get()};
+
+        for out_addr in addresses {
+            *out_addr = Self::alloc_block(storage, free_lists, 0) << 12;
+        }
     }
 }
 
@@ -261,7 +329,7 @@ mod tests {
         }
 
         fn get_entry(&mut self, index: u64) -> *mut FreeEntry {
-            &mut self.memory[(index << 12) as usize] as *mut _ as *mut _
+            (self.memory.as_ptr() as u64 + (index << 12)) as *mut FreeEntry
         }
 
         fn get_index(&mut self, entry: *mut FreeEntry) -> u64 {
@@ -270,12 +338,22 @@ mod tests {
     }
 
     #[test]
+    fn count_to_order() {
+        assert!(PhysMemoryManager::<TestStorage>::get_size_order(1) == 0);
+        assert!(PhysMemoryManager::<TestStorage>::get_size_order(2) == 1);
+        assert!(PhysMemoryManager::<TestStorage>::get_size_order(3) == 2);
+        assert!(PhysMemoryManager::<TestStorage>::get_size_order(4) == 2);
+
+        assert!(PhysMemoryManager::<TestStorage>::get_size_order(13) == 4);
+    }
+
+    #[test]
     fn free_single() {
         let mmap = &mut [
             MemorySegment {
                 start: 0,
                 page_count: 30,
-                state: MemorySegmentState::Free,
+                state: MemorySegmentState::Occupied,
             },
         ];
 
@@ -299,7 +377,7 @@ mod tests {
             MemorySegment {
                 start: 0,
                 page_count: 30,
-                state: MemorySegmentState::Free,
+                state: MemorySegmentState::Occupied,
             },
         ];
 
@@ -327,7 +405,7 @@ mod tests {
             MemorySegment {
                 start: 0,
                 page_count: 30,
-                state: MemorySegmentState::Free,
+                state: MemorySegmentState::Occupied,
             },
         ];
 
@@ -348,4 +426,111 @@ mod tests {
             assert!((*manager.free_lists.get_mut()[1]).order == 1);
         }
     }
+
+    #[test]
+    fn alloc_single() {
+        let mmap = &mut [
+            MemorySegment {
+                start: 0,
+                page_count: 1,
+                state: MemorySegmentState::Free,
+            },
+        ];
+
+        let mut manager = PhysMemoryManager::<TestStorage>::new(mmap);
+
+        let page = manager.alloc_page();
+        assert!(page == 0);
+
+        assert!(manager.storage.get_mut().get_buddy_map()[0] & (1 << 0) == 0);
+        assert!(manager.free_lists.get_mut()[0] == null_mut());
+    }
+
+    #[test]
+    fn alloc_split() {
+        let mmap = &mut [
+            MemorySegment {
+                start: 0,
+                page_count: 2,
+                state: MemorySegmentState::Free,
+            },
+        ];
+
+        let mut manager = PhysMemoryManager::<TestStorage>::new(mmap);
+
+        let page = manager.alloc_page();
+        assert!(page == 0);
+
+        assert!(manager.storage.get_mut().get_buddy_map()[0] & (1 << 0) == 0);
+        assert!(manager.storage.get_mut().get_buddy_map()[0] & (1 << 1) != 0);
+        assert!(manager.free_lists.get_mut()[0] != null_mut());
+        assert!(manager.free_lists.get_mut()[1] == null_mut());
+    }
+
+    #[test]
+    fn init_free_regions() {
+        {
+            let mmap = &mut [
+                MemorySegment {
+                    start: 68 * 4096,
+                    page_count: 2,
+                    state: MemorySegmentState::Free,
+                },
+                MemorySegment {
+                    start: 70 * 4096,
+                    page_count: 2,
+                    state: MemorySegmentState::Free,
+                },
+            ];
+
+            let mut manager = PhysMemoryManager::<TestStorage>::new(mmap);
+
+            unsafe {
+                assert!(manager.storage.get_mut().get_buddy_map()[1] & (1 << 4) != 0);
+                assert!(manager.storage.get_mut().get_buddy_map()[1] & (1 << 6) == 0);
+
+                assert!(manager.free_lists.get_mut()[0] == null_mut());
+                assert!(manager.free_lists.get_mut()[1] == null_mut());
+                assert!(manager.free_lists.get_mut()[2] != null_mut());
+
+                assert!((*manager.free_lists.get_mut()[2]).next == null_mut());
+                assert!((*manager.free_lists.get_mut()[2]).prev == null_mut());
+                assert!((*manager.free_lists.get_mut()[2]).order == 2);
+            }
+        }
+        {
+            let mmap = &mut [
+                MemorySegment {
+                    start: 68 * 4096,
+                    page_count: 2,
+                    state: MemorySegmentState::Free,
+                },
+                MemorySegment {
+                    start: 70 * 4096,
+                    page_count: 1,
+                    state: MemorySegmentState::Free,
+                },
+            ];
+
+            let mut manager = PhysMemoryManager::<TestStorage>::new(mmap);
+
+            unsafe {
+                assert!(manager.storage.get_mut().get_buddy_map()[1] & (1 << 4) != 0);
+                assert!(manager.storage.get_mut().get_buddy_map()[1] & (1 << 6) != 0);
+
+                assert!(manager.free_lists.get_mut()[0] != null_mut());
+                assert!(manager.free_lists.get_mut()[1] != null_mut());
+                assert!(manager.free_lists.get_mut()[2] == null_mut());
+
+                assert!((*manager.free_lists.get_mut()[0]).next == null_mut());
+                assert!((*manager.free_lists.get_mut()[0]).prev == null_mut());
+                assert!((*manager.free_lists.get_mut()[0]).order == 0);
+
+                assert!((*manager.free_lists.get_mut()[1]).next == null_mut());
+                assert!((*manager.free_lists.get_mut()[1]).prev == null_mut());
+                assert!((*manager.free_lists.get_mut()[1]).order == 1);
+            }
+        }
+    }
+
 }

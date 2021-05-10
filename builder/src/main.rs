@@ -26,7 +26,7 @@ fn main() {
 
     println!("-- Building for {}", arch);
 
-    println!("-- Building bootloader");
+    println!("-- Building bootloader ({})", profile_name);
     let bootloader_target = format!("{}-unknown-uefi", &arch);
     let status = {
         let mut command = Command::new(CARGO);
@@ -42,7 +42,7 @@ fn main() {
     };
     assert!(status.success(), "Failed to build bootloader");
 
-    println!("-- Building kernel");
+    println!("-- Building kernel ({})", profile_name);
     let kernel_target = format!("kernel-{}.json", &arch);
     let status = {
         let mut command = Command::new(CARGO);

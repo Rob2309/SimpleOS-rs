@@ -12,7 +12,7 @@ mod memory;
 
 /// The kernel entry point.
 /// This function will be called by the bootloader after preparing the environment.
-#[no_mangle]
+#[cfg_attr(not(test), no_mangle)]
 extern "C" fn _start(kernel_header: *const KernelHeader) -> ! {
     let kh = unsafe{&*kernel_header};
 
