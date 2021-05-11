@@ -109,3 +109,20 @@ pub fn print(msg: &str) {
         print_char(c);
     }
 }
+
+pub struct TerminalStream {}
+
+impl core::fmt::Write for TerminalStream {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        print(s);
+        Ok(())
+    }
+}
+
+static mut STREAM: TerminalStream = TerminalStream{};
+
+pub fn stream() -> &'static mut TerminalStream {
+    unsafe {
+        &mut STREAM
+    }
+}

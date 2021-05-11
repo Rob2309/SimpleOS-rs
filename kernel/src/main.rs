@@ -4,7 +4,7 @@
 #![feature(maybe_uninit_extra)]
 #![feature(asm)]
 
-use core::slice;
+use core::fmt::Write;
 
 use common_structures::KernelHeader;
 
@@ -33,7 +33,7 @@ fn main(kernel_header: *const KernelHeader) -> ! {
     terminal::init(kh);
 
     terminal::clear();
-    terminal::print("Hello World!\n");
+    write!(terminal::stream(), "Hello {}!\n", "World").unwrap();
 
     loop {}
 }
