@@ -12,8 +12,8 @@ fn main() {
     let mut release_mode = false;
 
     for arg in env::args() {
-        if arg.starts_with("--target=") {
-            arch = arg[9..].to_owned();
+        if let Some(a) = arg.strip_prefix("--target=") {
+            arch = a.to_owned();
         } else if arg == "--release" {
             release_mode = true;
         } else if arg == "--help" || arg == "-h" {

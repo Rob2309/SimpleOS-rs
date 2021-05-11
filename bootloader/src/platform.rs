@@ -1,7 +1,7 @@
 use crate::KernelHeader;
 
 #[cfg(target_arch="x86_64")]
-mod platform {
+mod implementation {
     use common_structures::config;
 
     use super::*;
@@ -30,4 +30,4 @@ mod platform {
     }
 }
 
-pub use platform::*;
+pub use implementation::*;

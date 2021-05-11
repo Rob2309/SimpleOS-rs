@@ -112,7 +112,7 @@ impl PhysManagerStorage for InlineStorage {
 /// Starts unitialized, use [`api::init_phys_manager()`] to initialize.
 static mut INSTANCE: MaybeUninit<PhysMemoryManager> = MaybeUninit::uninit();
 
-pub fn init(kernel_header: &KernelHeader) {
+pub fn init_phys_manager(kernel_header: &KernelHeader) {
     unsafe {
         INSTANCE.write(PhysMemoryManager::new(slice::from_raw_parts_mut(kernel_header.memory_map, kernel_header.memory_map_entries as usize)));
     }
@@ -391,11 +391,6 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
             *out_addr = Self::alloc_block(storage, free_lists, 0) << 12;
         }
     }
-}
-
-pub mod api {
-    pub use super::phys_manager;
-    pub use super::init as init_phys_manager;
 }
 
 #[cfg(test)]

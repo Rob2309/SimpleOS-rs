@@ -14,6 +14,14 @@ mod memory;
 /// This function will be called by the bootloader after preparing the environment.
 #[cfg_attr(not(test), no_mangle)]
 extern "C" fn _start(kernel_header: *const KernelHeader) -> ! {
+    main(kernel_header);
+}
+
+// Since this crate is not "no_main" while testing, rust-analyzer and similar tools will spit out
+// false warnings that certain functions are "never used". By naming the below function "main", this
+// does not seem to happen.
+
+fn main(kernel_header: *const KernelHeader) -> ! {
     let kh = unsafe{&*kernel_header};
 
     memory::init_phys_manager(kh);
