@@ -44,6 +44,7 @@ fn run_clippy(arch: String) {
         command.status().unwrap();
     }
     
+    println!("-- Clippy kernel");
     {
         let kernel_target = format!("kernel-{}.json", &arch);
         let mut command = Command::new(CARGO);

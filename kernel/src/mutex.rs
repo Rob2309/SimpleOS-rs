@@ -44,7 +44,7 @@ impl SpinLock {
 
 impl Lock for SpinLock {
     fn try_lock(&self) -> Option<LockGuard<Self>> {
-        if self.locked.swap(true, Ordering::Acquire) == false {
+        if !self.locked.swap(true, Ordering::Acquire) {
             Some(LockGuard {
                 lock: self,
             })

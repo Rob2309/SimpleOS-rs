@@ -202,12 +202,12 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
     /// Note that this function will not clear the corresponding buddy bitmap entry.
     fn remove_buddy_list_entry(head: &mut *mut FreeEntry, entry: *mut FreeEntry) {
         unsafe {
-            if (*entry).prev == null_mut() {
+            if (*entry).prev.is_null() {
                 *head = (*entry).next;
             } else {
                 (*(*entry).prev).next = (*entry).next;
             }
-            if (*entry).next != null_mut() {
+            if !(*entry).next.is_null() {
                 (*(*entry).next).prev = (*entry).prev;
             }
         }
@@ -218,7 +218,7 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
     /// Note that this function will not set the corresponding buddy bitmap entry.
     fn push_buddy_list_entry(head: &mut *mut FreeEntry, entry: *mut FreeEntry) {
         unsafe {
-            if *head != null_mut() {
+            if !(*head).is_null() {
                 (*entry).next = *head;
                 (**head).prev = entry;
             }
@@ -230,12 +230,12 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
     /// If the list is empty it returns `nullptr`.
     fn pop_buddy_list_entry(head: &mut *mut FreeEntry) -> *mut FreeEntry {
         unsafe {
-            if *head == null_mut() {
+            if (*head).is_null() {
                 null_mut()
             } else {
                 let tmp = *head;
                 *head = (**head).next;
-                if *head != null_mut() {
+                if !(*head).is_null() {
                     (**head).prev = null_mut();
                 }
                 tmp
@@ -289,7 +289,7 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
         let entry = Self::pop_buddy_list_entry(&mut free_lists[order as usize]);
 
         // No block of the requested order is available, try to split a higher order block.
-        if entry == null_mut() {
+        if entry.is_null() {
             // If the requested order is MAX_ORDER, we cannot split a higher order block.
             if (order as usize) == MAX_ORDER {
                 panic!("Out of physical memory");
