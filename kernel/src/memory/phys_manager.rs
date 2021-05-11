@@ -5,6 +5,8 @@ use common_structures::{KernelHeader, MemorySegment, MemorySegmentState};
 
 use crate::mutex::{Lock, SpinLock};
 
+use super::{phys_to_virt, virt_to_phys};
+
 /// Maximum order a buddy allocation can have.
 /// 
 /// 2^8 pages = 256 pages = 1MB
@@ -70,7 +72,7 @@ impl PhysManagerStorage for InlineStorage {
                 .find(|entry| entry.state == MemorySegmentState::Free && entry.page_count >= num_storage_pages)
                 .expect("No suitable memory location found for buddy map");
             
-            let res = entry.start;
+            let res = phys_to_virt::<u8>(entry.start);
 
             // mark the space for the buddy bitmap as occupied by reducing the size
             // of the selected MemorySegment.
@@ -97,13 +99,13 @@ impl PhysManagerStorage for InlineStorage {
     fn get_entry(&mut self, index: u64) -> *mut FreeEntry {
         // By multiplying the index by 4096, we put a given FreeEntry
         // directly into the memory segment it describes.
-        (index << 12) as *mut FreeEntry
+        phys_to_virt(index << 12)
     }
 
     fn get_index(&mut self, entry: *mut FreeEntry) -> u64 {
         // The index of a given FreeEntry is its "page index",
         // so just divide its address by 4096.
-        (entry as u64) >> 12
+        virt_to_phys(entry) >> 12
     }
 }
 

@@ -78,6 +78,7 @@ mod platform {
         // only contain 512 entries / one memory page.
         assert!(pml4_pages == 1, "PML4 larger than one page, should be impossible");
 
+        write!(system_table.stdout(), "pml4_entries={}, pdp_entries={}, pd_entries={}\r\n", pml4_entries, pdp_entries, pd_entries).unwrap();
         write!(system_table.stdout(), "Using {} physical pages for initial page table (pml4_pages={}, pdp_pages={}, pd_pages={})\r\n", alloc_pages, pml4_pages, pdp_pages, pd_pages).unwrap();
 
         // Allocate storage for the page table.
@@ -121,9 +122,10 @@ mod platform {
             write!(system_table.stdout(), "High memory start: {:#016X}\r\n", HIGH_MEM_BASE).unwrap();
         }
 
-        paging_info.page_buffer = page_buffer_ptr;
+        paging_info.page_buffer = ptr_to_kernelspace(page_buffer_ptr);
         paging_info.pdp_pages = pdp_pages;
         paging_info.pd_pages = pd_pages;
+        paging_info.pml4_entries = pml4_entries;
 
         // The CR3 register holds the physical address of the PML4 Table.
         // When written to, all TLB entries are invalidated automatically.

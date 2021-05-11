@@ -6,7 +6,7 @@
 #![feature(alloc_error_handler)]
 #![feature(asm)]
 
-use core::{panic::PanicInfo, slice};
+use core::{panic::PanicInfo, slice, ptr::null_mut};
 
 use uefi::{prelude::*, proto::{console::{gop::{GraphicsOutput, PixelFormat}, text::Output}, loaded_image::LoadedImage, media::fs::SimpleFileSystem}, table::boot::{AllocateType, MemoryType}};
 use core::fmt::Write;
@@ -55,20 +55,8 @@ extern "efiapi" fn efi_main(img_handle: Handle, system_table: SystemTable<Boot>)
     // Allocate storage for the KernelHeader that will be passed to the kernel entry point
     let mut kernel_header = allocator::allocate_object::<KernelHeader>(&system_table, MemoryType::LOADER_DATA);
 
-    write!(system_table.stdout(), "Initializing Paging...\r\n").unwrap();
-
-    // initialize page tables so that the higher memory half mirrors the lower half.
-    // Since we want the kernel to be located in the higher memory half, but the UEFI page table
-    // will contain only an identity mapping (virtual address == physical address), we have to clone this mapping to the higher memory half.
-    paging::init(&system_table, &mut kernel_header.paging_info);
-
-    // convert kernel_header address to the corresponding higher memory half address,
-    // so that the kernel can use the header.
-    kernel_header = unsafe{&mut *paging::ptr_to_kernelspace(kernel_header)};
-
-    write!(system_table.stdout(), "Switching video mode...\r\n").unwrap();
-
     // select best video mode and enable it
+    write!(system_table.stdout(), "Switching video mode...\r\n").unwrap();
     {
         let gfx = unsafe {&mut *graphics.get()};
 
@@ -92,6 +80,20 @@ extern "efiapi" fn efi_main(img_handle: Handle, system_table: SystemTable<Boot>)
         kernel_header.screen_scanline_width = m.info().stride() as u32;
         kernel_header.screen_buffer = gfx.frame_buffer().as_mut_ptr();
     }
+
+    write!(system_table.stdout(), "Initializing Paging...\r\n").unwrap();
+
+    // initialize page tables so that the higher memory half mirrors the lower half.
+    // Since we want the kernel to be located in the higher memory half, but the UEFI page table
+    // will contain only an identity mapping (virtual address == physical address), we have to clone this mapping to the higher memory half.
+    paging::init(&system_table, &mut kernel_header.paging_info);
+
+    // convert kernel_header address to the corresponding higher memory half address,
+    // so that the kernel can use the header.
+    kernel_header = unsafe{&mut *paging::ptr_to_kernelspace(kernel_header)};
+    kernel_header.screen_buffer = paging::ptr_to_kernelspace(kernel_header.screen_buffer);
+
+    write!(system_table.stdout(), "High memory starting at {:#016X}\r\n", paging::ptr_to_kernelspace(null_mut::<u8>()) as u64).unwrap();
 
     write!(system_table.stdout(), "Loading modules...\r\n").unwrap();
 
@@ -168,11 +170,12 @@ extern "efiapi" fn efi_main(img_handle: Handle, system_table: SystemTable<Boot>)
         };
     }
 
-    kernel_header.memory_map = memory_map.as_mut_ptr();
+    kernel_header.memory_map = paging::ptr_to_kernelspace(memory_map.as_mut_ptr());
     kernel_header.memory_map_entries = memory_map_entries as u64;
+    kernel_header.high_memory_base = paging::ptr_to_kernelspace(null_mut::<u8>()) as u64;
 
     // Jump to the kernel
-    platform::goto_entrypoint(kernel_header, entry_point, kernel_stack);
+    platform::goto_entrypoint(kernel_header, entry_point, paging::ptr_to_kernelspace(kernel_stack));
 }
 
 /// Will be called by functions like panic!(), expect(), unwrap(), etc. when errors occur.

@@ -19,6 +19,9 @@ pub struct KernelHeader {
     pub memory_map: *mut MemorySegment,
     /// number of entries in the memory_map
     pub memory_map_entries: u64,
+    
+    /// base address of the physical memory mapping in the higher memory half.
+    pub high_memory_base: u64,
 }
 
 #[repr(C)]
@@ -50,4 +53,5 @@ pub struct PagingInfo {
     pub pdp_pages: u64,
     /// Number of pages used for the Page Directory Tables
     pub pd_pages: u64,
+    pub pml4_entries: u64,
 }

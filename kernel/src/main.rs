@@ -2,6 +2,7 @@
 #![cfg_attr(not(test), no_main)]
 
 #![feature(maybe_uninit_extra)]
+#![feature(asm)]
 
 use core::slice;
 
@@ -24,7 +25,9 @@ extern "C" fn _start(kernel_header: *const KernelHeader) -> ! {
 fn main(kernel_header: *const KernelHeader) -> ! {
     let kh = unsafe{&*kernel_header};
 
+    memory::set_high_mem_base(kh.high_memory_base);
     memory::init_phys_manager(kh);
+    memory::init_virt_manager(&kh.paging_info);
 
     let pixels = unsafe { slice::from_raw_parts_mut(kh.screen_buffer, kh.screen_scanline_width as usize * kh.screen_height as usize * 4) };
 
