@@ -428,6 +428,70 @@ mod tests {
     }
 
     #[test]
+    fn free_dont_merge_different_orders() {
+        let mmap = &mut [
+            MemorySegment {
+                start: 0,
+                page_count: 1,
+                state: MemorySegmentState::Free,
+            },
+            MemorySegment {
+                start: 1,
+                page_count: 3,
+                state: MemorySegmentState::Occupied,
+            }
+        ];
+
+        let mut manager = PhysMemoryManager::<TestStorage>::new(mmap);
+
+        manager.free_linear_pages(2 * 4096, 2);
+
+        unsafe {
+            assert!(manager.storage.get_mut().get_buddy_map()[0] & (1 << 0) != 0);
+            assert!(manager.storage.get_mut().get_buddy_map()[0] & (1 << 1) == 0);
+            assert!(manager.storage.get_mut().get_buddy_map()[0] & (1 << 2) != 0);
+            assert!(manager.storage.get_mut().get_buddy_map()[0] & (1 << 3) == 0);
+
+            assert!(manager.free_lists.get_mut()[0] != null_mut());
+            assert!((*manager.free_lists.get_mut()[0]).next == null_mut());
+            assert!((*manager.free_lists.get_mut()[0]).prev == null_mut());
+            assert!((*manager.free_lists.get_mut()[0]).order == 0);
+
+            assert!(manager.free_lists.get_mut()[1] != null_mut());
+            assert!((*manager.free_lists.get_mut()[1]).next == null_mut());
+            assert!((*manager.free_lists.get_mut()[1]).prev == null_mut());
+            assert!((*manager.free_lists.get_mut()[1]).order == 1);
+        }
+    }
+
+    #[test]
+    fn init_dont_merge_max_order() {
+        let mmap = &mut [
+            MemorySegment {
+                start: 0,
+                page_count: (1 << MAX_ORDER) * 2,
+                state: MemorySegmentState::Free,
+            },
+        ];
+
+        let mut manager = PhysMemoryManager::<TestStorage>::new(mmap);
+
+        let index = 1 << MAX_ORDER;
+        let entry = index / 64;
+        let bit = index % 64;
+
+        unsafe {
+            assert!(manager.storage.get_mut().get_buddy_map()[0] & (1 << 0) != 0);
+            assert!(manager.storage.get_mut().get_buddy_map()[entry as usize] & (1 << bit) != 0);
+
+            assert!(manager.free_lists.get_mut()[MAX_ORDER] != null_mut());
+            assert!((*manager.free_lists.get_mut()[MAX_ORDER]).next != null_mut());
+            assert!((*manager.free_lists.get_mut()[MAX_ORDER]).prev == null_mut());
+            assert!((*manager.free_lists.get_mut()[MAX_ORDER]).order == MAX_ORDER);
+        }
+    }
+
+    #[test]
     fn alloc_single() {
         let mmap = &mut [
             MemorySegment {
