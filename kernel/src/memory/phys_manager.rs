@@ -136,6 +136,7 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
         let max_address = memory_map.iter()
             .map(|entry| entry.start + entry.page_count * 4096)
             .max().expect("Memory Map is empty");
+        verbose!("PhysManager: max_address={:#016X}", max_address);
 
         let storage = Storage::new(max_address >> 12, memory_map).into();
 

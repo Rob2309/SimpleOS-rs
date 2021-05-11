@@ -64,9 +64,18 @@ fn advance_cursor() {
     }
 }
 
+fn new_line() {
+    let info = unsafe{&mut INFO};
+    info.cursor_x = 0;
+    info.cursor_y += 1;
+    if info.cursor_y >= info.rows {
+        info.cursor_y = 0;
+    }
+}
+
 pub fn print_char(c: char) {
     if c == '\n' {
-        advance_cursor();
+        new_line();
         return;
     }
 
@@ -125,4 +134,26 @@ pub fn stream() -> &'static mut TerminalStream {
     unsafe {
         &mut STREAM
     }
+}
+
+#[cfg(feature="verbose-logging")]
+macro_rules! verbose {
+    ($fmt:literal $(, $args:expr)*) => {
+        use core::fmt::Write;
+        writeln!(crate::terminal::stream(), $fmt $(, $args)*).unwrap();
+    };
+}
+
+#[cfg(not(feature="verbose-logging"))]
+macro_rules! verbose {
+    ($stream:expr, $fmt:literal $(, $args:expr)*) => {
+        
+    };
+}
+
+macro_rules! log {
+    ($fmt:literal $(, $args:expr)*) => {
+        use core::fmt::Write;
+        writeln!(crate::terminal::stream(), $fmt $(, $args)*).unwrap();
+    };
 }

@@ -8,9 +8,10 @@ use core::fmt::Write;
 
 use common_structures::KernelHeader;
 
+#[macro_use]
+mod terminal;
 mod mutex;
 mod memory;
-mod terminal;
 
 /// The kernel entry point.
 /// This function will be called by the bootloader after preparing the environment.
@@ -27,13 +28,13 @@ fn main(kernel_header: *const KernelHeader) -> ! {
     let kh = unsafe{&*kernel_header};
 
     memory::set_high_mem_base(kh.high_memory_base);
-    memory::init_phys_manager(kh);
-    memory::init_virt_manager(&kh.paging_info);
 
     terminal::init(kh);
-
     terminal::clear();
-    write!(terminal::stream(), "Hello {}!\n", "World").unwrap();
+    log!("Starting kernel...");
+
+    memory::init_phys_manager(kh);
+    memory::init_virt_manager(&kh.paging_info);
 
     loop {}
 }
