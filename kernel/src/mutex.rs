@@ -1,7 +1,10 @@
-use core::{cell::UnsafeCell, marker::PhantomData, ops::{Deref, DerefMut}, sync::atomic::{AtomicBool, Ordering}};
+use core::sync::atomic::{AtomicBool, Ordering};
 
+/// Interface for generic Locks.
 pub trait Lock {
+    /// Try to lock, return a [`LockGuard`] if successful.
     fn try_lock(&self) -> Option<LockGuard<Self>>;
+    /// Block until the lock can be acquired.
     fn lock(&self) -> LockGuard<Self> {
         loop {
             let lg = self.try_lock();
@@ -11,9 +14,11 @@ pub trait Lock {
         }
     }
 
+    /// Unlock the lock.
     fn unlock(&self);
 }
 
+/// Automatically unlocks a lock when dropped.
 pub struct LockGuard<'a, L: Lock + ?Sized> {
     lock: &'a L,
 }
@@ -24,6 +29,7 @@ impl<'a, L: Lock + ?Sized> Drop for LockGuard<'a, L> {
     }
 }
 
+/// Basic kernel SpinLock.
 pub struct SpinLock {
     locked: AtomicBool,
 }
