@@ -10,6 +10,7 @@ use common_structures::KernelHeader;
 
 mod mutex;
 mod memory;
+mod terminal;
 
 /// The kernel entry point.
 /// This function will be called by the bootloader after preparing the environment.
@@ -29,21 +30,12 @@ fn main(kernel_header: *const KernelHeader) -> ! {
     memory::init_phys_manager(kh);
     memory::init_virt_manager(&kh.paging_info);
 
-    let pixels = unsafe { slice::from_raw_parts_mut(kh.screen_buffer, kh.screen_scanline_width as usize * kh.screen_height as usize * 4) };
+    terminal::init(kh);
 
-    let mut color = 0u8;
+    terminal::clear();
+    terminal::print("Hello World!\n");
 
-    loop {
-        for x in 500..kh.screen_width.min(550) {
-            for y in 500..kh.screen_height.min(550) {
-                pixels[((x + y * kh.screen_scanline_width) * 4) as usize    ] = color;
-                pixels[((x + y * kh.screen_scanline_width) * 4) as usize + 1] = y as u8;
-                pixels[((x + y * kh.screen_scanline_width) * 4) as usize + 2] = 0x00;
-            }
-        }
-        
-        color = color.wrapping_add(1);
-    }
+    loop {}
 }
 
 /// Will be called by functions like panic!(), expect(), unwrap(), etc. when errors occur.
