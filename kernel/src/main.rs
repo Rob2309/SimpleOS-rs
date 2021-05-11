@@ -4,8 +4,6 @@
 #![feature(maybe_uninit_extra)]
 #![feature(asm)]
 
-use core::fmt::Write;
-
 use common_structures::KernelHeader;
 
 #[macro_use]
@@ -41,7 +39,11 @@ fn main(kernel_header: *const KernelHeader) -> ! {
 
 /// Will be called by functions like panic!(), expect(), unwrap(), etc. when errors occur.
 #[cfg_attr(not(test), panic_handler)]
-pub fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
-    // Since we have no printing functionality yet, we just loop and cry :(
+pub fn panic_handler(info: &core::panic::PanicInfo) -> ! {
+    // We just assume that we made it past the terminal initialization code.
+    // Terminal initialization should theoretically be unfailable, let's hope.
+
+    log!("===PANIC=== {}", info);
+
     loop {}
 }
