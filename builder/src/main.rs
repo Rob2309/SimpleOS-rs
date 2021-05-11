@@ -10,18 +10,52 @@ fn print_usage() {
 fn main() {
     let mut arch = "x86_64".to_owned();
     let mut release_mode = false;
+    let mut clippy_mode = false;
 
     for arg in env::args() {
         if let Some(a) = arg.strip_prefix("--target=") {
             arch = a.to_owned();
         } else if arg == "--release" {
             release_mode = true;
+        } else if arg == "--clippy" {
+            clippy_mode = true;  
         } else if arg == "--help" || arg == "-h" {
             print_usage();
             exit(0);
         }
     }
 
+    if clippy_mode {
+        run_clippy(arch);
+    } else {
+        build(arch, release_mode);
+    }
+}
+
+fn run_clippy(arch: String) {
+    println!("-- Clippy bootloader");
+    {
+        let bootloader_target = format!("{}-unknown-uefi", &arch);
+        let mut command = Command::new(CARGO);
+        command.arg("clippy").arg("-p").arg("bootloader")
+            .arg("-Zbuild-std=core,compiler_builtins")
+            .arg("-Zbuild-std-features=compiler-builtins-mem")
+            .arg(format!("--target={}", &bootloader_target));
+        command.status().unwrap();
+    }
+    
+    {
+        let kernel_target = format!("kernel-{}.json", &arch);
+        let mut command = Command::new(CARGO);
+        command.arg("clippy").arg("-p").arg("kernel")
+            .arg("-Zbuild-std=core,compiler_builtins")
+            .arg("-Zbuild-std-features=compiler-builtins-mem")
+            .arg(format!("--target={}/{}", ROOT_DIR, &kernel_target));
+        command.status().unwrap();
+    }
+}
+
+fn build(arch: String, release_mode: bool) {
     let profile_name = if release_mode { "release" } else { "debug" };
 
     println!("-- Building for {}", arch);
