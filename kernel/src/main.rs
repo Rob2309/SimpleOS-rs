@@ -10,6 +10,7 @@ use common_structures::KernelHeader;
 mod terminal;
 mod mutex;
 mod memory;
+mod arch;
 
 /// The kernel entry point.
 /// This function will be called by the bootloader after preparing the environment.
@@ -35,6 +36,8 @@ fn main(kernel_header: *const KernelHeader) -> ! {
 
     memory::init_phys_manager(kh);
     memory::init_virt_manager(&kh.paging_info);
+
+    arch::init_platform();
 
     loop {}
 }
