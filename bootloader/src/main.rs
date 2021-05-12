@@ -17,7 +17,7 @@ mod elf;
 mod paging;
 mod platform;
 
-use common_structures::{KernelHeader, MemorySegment, MemorySegmentState, config};
+use common_structures::{Format, KernelHeader, MemorySegment, MemorySegmentState, config};
 
 /// Used by the [panic_handler()] to print error messages
 static mut STDOUT: *mut Output = core::ptr::null_mut();
@@ -79,6 +79,11 @@ extern "efiapi" fn efi_main(img_handle: Handle, system_table: SystemTable<Boot>)
         kernel_header.screen_height = m.info().resolution().1 as u32;
         kernel_header.screen_scanline_width = m.info().stride() as u32;
         kernel_header.screen_buffer = gfx.frame_buffer().as_mut_ptr();
+        kernel_header.screen_format = match m.info().pixel_format() {
+            PixelFormat::Rgb => Format::RGB,
+            PixelFormat::Bgr => Format::BGR,
+            _ => Format::RGB,
+        };
     }
 
     write!(system_table.stdout(), "Initializing Paging...\r\n").unwrap();

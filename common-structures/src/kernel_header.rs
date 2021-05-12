@@ -11,6 +11,7 @@ pub struct KernelHeader {
     pub screen_height: u32,
     /// The width of a scanline in pixels.
     pub screen_scanline_width: u32,
+    pub screen_format: Format,
 
     // Platform dependent Page Table information
     pub paging_info: PagingInfo,
@@ -22,6 +23,13 @@ pub struct KernelHeader {
     
     /// base address of the physical memory mapping in the higher memory half.
     pub high_memory_base: u64,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Format {
+    RGB,
+    BGR,
 }
 
 #[repr(C)]

@@ -132,13 +132,13 @@ unsafe impl<Storage: PhysManagerStorage> Send for PhysMemoryManager<Storage> {}
 impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
     /// Create a new [`PhysMemoryManager`] from a given `memory_map`.
     pub fn new(memory_map: &mut [MemorySegment]) -> Self {
-        verbose!("Starting PhysManager initialization");
+        verbose!("PhysManager", "Starting initialization");
 
         // find out the maximum address that is accessible according to the memory_map.
         let max_address = memory_map.iter()
             .map(|entry| entry.start + entry.page_count * 4096)
             .max().expect("Memory Map is empty");
-        verbose!("PhysManager: max_address={:#016X}", max_address);
+        verbose!("PhysManager", "max_address={:#016X}", max_address);
 
         let storage = Storage::new(max_address >> 12, memory_map).into();
 
@@ -150,7 +150,7 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
 
         // Inform the memory manager of every MemorySegment that is marked as free.
         for entry in memory_map.iter().filter(|&e| e.state == MemorySegmentState::Free) {
-            verbose!("PhysManager: free segment {:#016X} - {:#016X}    {}", entry.start, entry.start + entry.page_count * 4096, entry.page_count);
+            verbose!("PhysManager", "Free segment {:#016X} - {:#016X}    {}", entry.start, entry.start + entry.page_count * 4096, entry.page_count);
             res.add_region(entry.start >> 12, entry.page_count);
         }
 
@@ -166,11 +166,11 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
                     }
                 }
 
-                verbose!("PhysManager: {} regions of order {}", count, order);
+                verbose!("PhysManager", "{} regions of order {}", count, order);
             }
         }
 
-        verbose!("PhysManager initialized");
+        verbose!("PhysManager", "Initialized");
 
         res
     }

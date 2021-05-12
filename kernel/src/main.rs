@@ -29,7 +29,9 @@ fn main(kernel_header: *const KernelHeader) -> ! {
 
     terminal::init(kh);
     terminal::clear();
-    log!("Starting kernel...");
+    info!("Kernel", "Starting kernel...");
+    warning!("Test", "Warning");
+    error!("Test", "Error");
 
     memory::init_phys_manager(kh);
     memory::init_virt_manager(&kh.paging_info);
@@ -43,7 +45,7 @@ pub fn panic_handler(info: &core::panic::PanicInfo) -> ! {
     // We just assume that we made it past the terminal initialization code.
     // Terminal initialization should theoretically be unfailable, let's hope.
 
-    log!("===PANIC=== {}", info);
+    error!("===PANIC===", "{}", info);
 
     loop {}
 }
