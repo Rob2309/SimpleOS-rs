@@ -17,6 +17,11 @@ run-release:
 	VBoxManage convertfromraw target/image/x86_64/release/image.img target/vm.vdi --format VDI --uuid 430eee2a-0fdf-4d2a-88f0-5b99ea8cffcb
 	VBoxManage startvm SimpleOS-rs
 
+.PHONY: run-release-qemu
+run-release-qemu:
+	cargo osbuild --release
+	qemu-system-x86_64 -m 4096 -machine q35 -cpu qemu64 -net none -drive if=pflash,unit=0,format=raw,file=$(ovmf_dir)/OVMF_CODE.fd,readonly=on -drive if=pflash,unit=1,format=raw,file=$(ovmf_dir)/OVMF_VARS.fd,readonly=on -drive file=target/image/x86_64/release/image.img,if=ide
+
 .PHONY: debug-kernel
 debug-kernel:
 	cargo osbuild

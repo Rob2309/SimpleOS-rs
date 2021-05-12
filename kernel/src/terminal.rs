@@ -139,21 +139,25 @@ pub fn stream() -> &'static mut TerminalStream {
 #[cfg(feature="verbose-logging")]
 macro_rules! verbose {
     ($fmt:literal $(, $args:expr)*) => {
-        use core::fmt::Write;
-        writeln!(crate::terminal::stream(), $fmt $(, $args)*).unwrap();
+        {
+            use core::fmt::Write;
+            writeln!(crate::terminal::stream(), $fmt $(, $args)*).unwrap();
+        }
     };
 }
 
 #[cfg(not(feature="verbose-logging"))]
 macro_rules! verbose {
-    ($stream:expr, $fmt:literal $(, $args:expr)*) => {
+    ($fmt:literal $(, $args:expr)*) => {
         
     };
 }
 
 macro_rules! log {
     ($fmt:literal $(, $args:expr)*) => {
-        use core::fmt::Write;
-        writeln!(crate::terminal::stream(), $fmt $(, $args)*).unwrap();
+        {
+            use core::fmt::Write;
+            writeln!(crate::terminal::stream(), $fmt $(, $args)*).unwrap();
+        }
     };
 }
