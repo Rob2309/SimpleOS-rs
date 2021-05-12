@@ -21,16 +21,29 @@ pub fn virt_to_phys<T>(virt: *mut T) -> u64 {
 }
 
 pub fn init_virt_manager(paging_info: &PagingInfo) {
-    unsafe {
+    info!("VirtManager", "Starting initialization");
+
+    verbose!("VirtManager", "high_mem_base={:#016X}", unsafe{HIGH_MEM_BASE});
+
+    platform::init(paging_info);
+
+    info!("VirtManager", "Initialized");
+}
+
+#[cfg(target_arch="x86_64")]
+mod platform {
+    use super::*;
+    pub fn init(paging_info: &PagingInfo) {
         let pml4 = paging_info.page_buffer;
         for i in 0..paging_info.pml4_entries {
-            pml4.offset(i as isize).write(0);
+            unsafe{pml4.offset(i as isize).write(0);}
         }
+        verbose!("VirtManager", "PML4 at phys address {:#016X}", virt_to_phys(pml4));
 
         let cr3 = virt_to_phys(paging_info.page_buffer);
-        asm!(
+        unsafe{asm!(
             "mov cr3, {}",
             in(reg) cr3
-        );
+        )};
     }
 }

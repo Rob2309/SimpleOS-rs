@@ -132,7 +132,7 @@ unsafe impl<Storage: PhysManagerStorage> Send for PhysMemoryManager<Storage> {}
 impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
     /// Create a new [`PhysMemoryManager`] from a given `memory_map`.
     pub fn new(memory_map: &mut [MemorySegment]) -> Self {
-        verbose!("PhysManager", "Starting initialization");
+        info!("PhysManager", "Starting initialization");
 
         // find out the maximum address that is accessible according to the memory_map.
         let max_address = memory_map.iter()
@@ -170,7 +170,7 @@ impl<Storage: PhysManagerStorage> PhysMemoryManager<Storage> {
             }
         }
 
-        verbose!("PhysManager", "Initialized");
+        info!("PhysManager", "Initialized");
 
         res
     }
