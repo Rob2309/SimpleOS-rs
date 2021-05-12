@@ -6,7 +6,10 @@ pub const SELECTOR_USER_CODE: u16 = 24 | 3;
 pub const SELECTOR_USER_DATA: u16 = 32 | 3;
 
 pub fn init() {
+    info!("GDT", "Initializing...");
+
     let mem = memory::phys_to_virt::<GDTEntry>(memory::phys_manager().alloc_page());
+    verbose!("GDT", "GDT at {:#016X}", mem as u64);
 
     unsafe {
         mem.offset(0).write(GDTEntry::null());
@@ -28,7 +31,7 @@ pub fn init() {
         "push {kcode}",
         "lea {tmp}, [1f + rip]",
         "push {tmp}",
-        "retf",
+        "retfq",
         "1: nop",
 
         desc=in(reg) &desc as *const _,
@@ -36,9 +39,11 @@ pub fn init() {
         kcode=const SELECTOR_KERNEL_CODE,
         tmp=lateout(reg) _,
     )};
+
+    info!("GDT", "Initialized");
 } 
 
-#[repr(C)]
+#[repr(C, packed)]
 pub struct GDTR {
     pub limit: u16,
     pub base: u64,
@@ -51,13 +56,12 @@ pub struct GDTEntry {
 
 impl GDTEntry {
     pub fn new(code: bool, user_mode: bool) -> Self {
-        let mut data = DESC_P | DESC_L;
-
-        if code {
-            data |= DESC_CODE_BASE;
+        let mut data = if code {
+            DESC_CODE_BASE
         } else {
-            data |= DESC_DATA_BASE;
-        }
+            DESC_DATA_BASE
+        };
+
         if user_mode {
             data |= DESC_USER_DPL;
         }
@@ -69,10 +73,9 @@ impl GDTEntry {
     }
 }
 
-const DESC_CODE_BASE: u64 = (1 << 43) | (1 << 44);
-const DESC_DATA_BASE: u64 = 1 << 44;
-
-const DESC_L: u64 = 1 << 53;
-const DESC_P: u64 = 1 << 47;
+/// L and P set
+const DESC_CODE_BASE: u64 = (1 << 43) | (1 << 44) | (1 << 47) | (1 << 53);
+/// for some reason, W has to be set, even though the spec states that attributes are ignored
+const DESC_DATA_BASE: u64 = (1 << 47) | (1 << 44) | (1 << 41);
 
 const DESC_USER_DPL: u64 = 3 << 45;
