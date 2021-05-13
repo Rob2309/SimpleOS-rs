@@ -1,9 +1,9 @@
-
-#[cfg(target_arch="x86_64")]
-mod x86_64;
-#[cfg(target_arch="x86_64")]
-use x86_64::*;
+use crate::arch::interrupt as arch;
 
 pub fn init() {
-    platform_init();
+    info!("IDT", "Initializing...");
+
+    arch::init();
+
+    info!("IDT", "Initialized...");
 }

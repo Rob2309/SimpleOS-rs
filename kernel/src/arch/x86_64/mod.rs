@@ -1,6 +1,4 @@
 
 pub mod gdt;
-
-pub fn init_platform() {
-    gdt::init();
-}
+pub mod platform;
+pub mod interrupt;

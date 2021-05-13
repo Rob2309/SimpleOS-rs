@@ -5,7 +5,7 @@ use crate::{arch::gdt, memory};
 static mut IDT: *mut IDTEntry = null_mut();
 static mut HANDLERS: [fn (&mut InterruptInfo); 256] = [isr_default_handler; 256];
 
-pub fn platform_init() {
+pub fn init() {
     let int_stack = memory::phys_to_virt::<u8>(memory::phys_manager().alloc_linear_pages(4)) as u64;
     gdt::set_ist1(int_stack + 4 * 4096);
 

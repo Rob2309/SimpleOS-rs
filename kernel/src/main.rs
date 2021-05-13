@@ -39,7 +39,7 @@ fn main(kernel_header: *const KernelHeader) -> ! {
     memory::init_phys_manager(kh);
     memory::init_virt_manager(&kh.paging_info);
 
-    arch::init_platform();
+    arch::platform::init();
 
     interrupt::init();
 
