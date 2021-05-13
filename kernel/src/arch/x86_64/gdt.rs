@@ -5,7 +5,6 @@ use core::ptr::null_mut;
 pub const SELECTOR_KERNEL_CODE: u16 = 8;
 pub const SELECTOR_KERNEL_DATA: u16 = 16;
 pub const SELECTOR_USER_CODE: u16 = 24 | 3;
-pub const SELECTOR_USER_DATA: u16 = 32 | 3;
 
 static mut TSS: *mut TSS = null_mut();
 
@@ -22,7 +21,6 @@ pub fn init() {
         mem.offset(1).write(GDTEntry::new(true, false));
         mem.offset(2).write(GDTEntry::new(false, false));
         mem.offset(3).write(GDTEntry::new(true, true));
-        mem.offset(4).write(GDTEntry::new(false, true));
 
         let tss_entry = GDTEntryTSS {
             limit0: size_of::<TSS>() as u16 - 1,
@@ -34,7 +32,7 @@ pub fn init() {
             base3: ((tss_mem as u64) >> 32) as u32,
             reserved: 0,
         };
-        (mem.offset(5) as *mut GDTEntryTSS).write(tss_entry);
+        (mem.offset(4) as *mut GDTEntryTSS).write(tss_entry);
 
         let tss = TSS {
             reserved0: 0,
@@ -59,7 +57,7 @@ pub fn init() {
 
     let desc = GDTR {
         base: mem as u64,
-        limit: 7 * 8 - 1,
+        limit: 6 * 8 - 1,
     };
     unsafe{asm!(
         "lgdt [{desc}]",
@@ -80,7 +78,7 @@ pub fn init() {
 
     unsafe{asm!(
         "ltr {sel:x}",
-        sel=in(reg) 5*8,
+        sel=in(reg) 4*8,
     )};
 
     info!("GDT", "Initialized");
@@ -105,15 +103,15 @@ pub struct GDTEntry {
 
 impl GDTEntry {
     pub fn new(code: bool, user_mode: bool) -> Self {
-        let mut data = if code {
-            DESC_CODE_BASE
+        let data = if code {
+            if user_mode {
+                DESC_CODE_BASE | DESC_USER_DPL
+            } else {
+                DESC_CODE_BASE
+            }
         } else {
             DESC_DATA_BASE
         };
-
-        if user_mode {
-            data |= DESC_USER_DPL;
-        }
 
         Self{data}
     }
@@ -124,7 +122,7 @@ impl GDTEntry {
 
 /// L and P set
 const DESC_CODE_BASE: u64 = (1 << 43) | (1 << 44) | (1 << 47) | (1 << 53);
-/// for some reason, W has to be set, even though the spec states that attributes are ignored
+/// W has to be set in order to not cause #GP when loaded into SS
 const DESC_DATA_BASE: u64 = (1 << 47) | (1 << 44) | (1 << 41);
 
 const DESC_USER_DPL: u64 = 3 << 45;
