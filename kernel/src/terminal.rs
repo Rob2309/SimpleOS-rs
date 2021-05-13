@@ -8,7 +8,6 @@ const MARGIN: u32 = 16;
 struct Info {
     framebuffer: *mut u8,
     scan_width: u32,
-    width: u32,
     height: u32,
     format: Format,
 
@@ -33,7 +32,6 @@ enum Mode {
 static mut INFO: Info = Info{
     framebuffer: null_mut(),
     scan_width: 0,
-    width: 0,
     height: 0,
     format: Format::RGB,
     rows: 0,
@@ -50,7 +48,6 @@ pub fn init(kernel_header: &KernelHeader) {
     unsafe {
         INFO = Info {
             framebuffer: kernel_header.screen_buffer,
-            width: kernel_header.screen_width,
             height: kernel_header.screen_height,
             rows: (kernel_header.screen_height - MARGIN * 2) / 8,
             columns: (kernel_header.screen_width - MARGIN * 2) / 8,
@@ -146,11 +143,11 @@ pub fn print_char(c: char) {
 
         for x in 0..8 {
             if row & (1 << x) != 0 {
-                fb[((x_start + x + (y_start + y as u32) * info.scan_width) * 4) as usize + 0] = if info.format == Format::BGR { info.color_b } else { info.color_r };
+                fb[((x_start + x + (y_start + y as u32) * info.scan_width) * 4) as usize    ] = if info.format == Format::BGR { info.color_b } else { info.color_r };
                 fb[((x_start + x + (y_start + y as u32) * info.scan_width) * 4) as usize + 1] = info.color_g;
                 fb[((x_start + x + (y_start + y as u32) * info.scan_width) * 4) as usize + 2] = if info.format == Format::BGR { info.color_r } else { info.color_b };
             } else {
-                fb[((x_start + x + (y_start + y as u32) * info.scan_width) * 4) as usize + 0] = 0;
+                fb[((x_start + x + (y_start + y as u32) * info.scan_width) * 4) as usize    ] = 0;
                 fb[((x_start + x + (y_start + y as u32) * info.scan_width) * 4) as usize + 1] = 0;
                 fb[((x_start + x + (y_start + y as u32) * info.scan_width) * 4) as usize + 2] = 0;
             }

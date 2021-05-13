@@ -6,7 +6,7 @@ pub const SELECTOR_KERNEL_CODE: u16 = 8;
 pub const SELECTOR_KERNEL_DATA: u16 = 16;
 pub const SELECTOR_USER_CODE: u16 = 24 | 3;
 
-static mut TSS: *mut TSS = null_mut();
+static mut TSS: *mut Tss = null_mut();
 
 pub fn init() {
     info!("GDT", "Initializing...");
@@ -14,7 +14,7 @@ pub fn init() {
     let mem = memory::phys_to_virt::<GDTEntry>(memory::phys_manager().alloc_page());
     verbose!("GDT", "GDT at {:#016X}", mem as u64);
 
-    let tss_mem = memory::phys_to_virt::<TSS>(memory::phys_manager().alloc_page());
+    let tss_mem = memory::phys_to_virt::<Tss>(memory::phys_manager().alloc_page());
 
     unsafe {
         mem.offset(0).write(GDTEntry::null());
@@ -23,7 +23,7 @@ pub fn init() {
         mem.offset(3).write(GDTEntry::new(true, true));
 
         let tss_entry = GDTEntryTSS {
-            limit0: size_of::<TSS>() as u16 - 1,
+            limit0: size_of::<Tss>() as u16 - 1,
             base0: tss_mem as u16,
             base1: ((tss_mem as u64) >> 16) as u8,
             type_dpl_p: 0b10001001,
@@ -34,7 +34,7 @@ pub fn init() {
         };
         (mem.offset(4) as *mut GDTEntryTSS).write(tss_entry);
 
-        let tss = TSS {
+        let tss = Tss {
             reserved0: 0,
             rsp0: 0,
             rsp1: 0,
@@ -55,7 +55,7 @@ pub fn init() {
         TSS = tss_mem;
     }
 
-    let desc = GDTR {
+    let desc = Gdtr {
         base: mem as u64,
         limit: 6 * 8 - 1,
     };
@@ -91,19 +91,19 @@ pub fn set_ist1(val: u64) {
 }
 
 #[repr(C, packed)]
-pub struct GDTR {
+struct Gdtr {
     pub limit: u16,
     pub base: u64,
 }
 
 #[repr(transparent)]
-pub struct GDTEntry {
-    data: u64,
+struct GDTEntry {
+    _data: u64,
 }
 
 impl GDTEntry {
-    pub fn new(code: bool, user_mode: bool) -> Self {
-        let data = if code {
+    fn new(code: bool, user_mode: bool) -> Self {
+        let _data = if code {
             if user_mode {
                 DESC_CODE_BASE | DESC_USER_DPL
             } else {
@@ -113,10 +113,10 @@ impl GDTEntry {
             DESC_DATA_BASE
         };
 
-        Self{data}
+        Self{_data}
     }
-    pub fn null() -> Self {
-        Self{data: 0}
+    fn null() -> Self {
+        Self{_data: 0}
     }
 }
 
@@ -129,7 +129,7 @@ const DESC_USER_DPL: u64 = 3 << 45;
 
 
 #[repr(C, packed)]
-pub struct GDTEntryTSS {
+struct GDTEntryTSS {
     limit0: u16,
     base0: u16,
     base1: u8,
@@ -141,7 +141,7 @@ pub struct GDTEntryTSS {
 }
 
 #[repr(C, packed)]
-pub struct TSS {
+struct Tss {
     reserved0: u32,
     rsp0: u64,
     rsp1: u64,

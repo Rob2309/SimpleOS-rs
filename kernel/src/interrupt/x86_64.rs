@@ -40,12 +40,12 @@ pub fn platform_init() {
 fn set_idt_entry(index: u8, handler: extern "C" fn()) {
     unsafe {
         IDT.offset(index as isize).write(IDTEntry {
-            offset_low: handler as u16,
+            offset_low: handler as usize as u16,
             target_selector: gdt::SELECTOR_KERNEL_CODE,
             ist: 1,
             type_dpl_p: 0b10001110,
-            offset_mid: ((handler as u64) >> 16) as u16,
-            offset_high: ((handler as u64) >> 32) as u32,
+            offset_mid: ((handler as usize) >> 16) as u16,
+            offset_high: ((handler as usize) >> 32) as u32,
             reserved: 0,
         });
     }
@@ -84,7 +84,7 @@ struct IDTDesc {
     address: u64,
 }
 
-#[repr(C, packed)]
+#[repr(C)]
 pub struct InterruptInfo {
     r15: u64,
     r14: u64,
