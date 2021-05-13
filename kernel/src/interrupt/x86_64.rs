@@ -3,6 +3,7 @@ use core::ptr::null_mut;
 use crate::{arch::gdt, memory};
 
 static mut IDT: *mut IDTEntry = null_mut();
+static mut HANDLERS: [fn (&mut InterruptInfo); 256] = [isr_default_handler; 256];
 
 pub fn platform_init() {
     let int_stack = memory::phys_to_virt::<u8>(memory::phys_manager().alloc_linear_pages(4)) as u64;
@@ -50,8 +51,20 @@ fn set_idt_entry(index: u8, handler: extern "C" fn()) {
     }
 }
 
+pub fn set_isr_handler(index: u8, handler: fn(&mut InterruptInfo)) {
+    unsafe {
+        HANDLERS[index as usize] = handler;
+    }
+}
+
+fn isr_default_handler(info: &mut InterruptInfo) {
+    warning!("IDT", "Interrupt {:#02X} occured and no handler installed", info.int_number);
+}
+
 extern "sysv64" fn isr_common_handler(info: &mut InterruptInfo) {
-    warning!("IDT", "Interrupt {:#02X} occured", info.int_number);
+    unsafe {
+        HANDLERS[info.int_number as usize](info);
+    }
 }
 
 #[repr(C, packed)]
@@ -72,7 +85,7 @@ struct IDTDesc {
 }
 
 #[repr(C, packed)]
-struct InterruptInfo {
+pub struct InterruptInfo {
     r15: u64,
     r14: u64,
     r13: u64,
