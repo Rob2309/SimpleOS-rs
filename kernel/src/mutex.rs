@@ -35,7 +35,7 @@ pub struct SpinLock {
 }
 
 impl SpinLock {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             locked: AtomicBool::new(false),
         }

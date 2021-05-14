@@ -8,12 +8,7 @@ static mut IDT: *mut IDTEntry = null_mut();
 static mut HANDLERS: [fn (&mut InterruptInfo); 256] = [isr_default_handler; 256];
 
 pub fn init() {
-    // Allocate a 16KB interrupt stack that will be used by every interrupt.
-    // This ensures that every interrupt has 16 KB stack space in every situation,
-    // but also makes nested interrupts impossible, since the two interrupts would corrupt each others
-    // stack space.
-    let int_stack = memory::phys_to_virt::<u8>(memory::phys_manager().alloc_linear_pages(4)) as u64;
-    gdt::set_ist1(int_stack + 4 * 4096);
+    info!("IDT", "Initializing...");
 
     // Allocate 256 * 16 bytes for the IDT, exactly one page.
     let idt = memory::phys_to_virt::<IDTEntry>(memory::phys_manager().alloc_page());
@@ -21,17 +16,7 @@ pub fn init() {
         idt.write_bytes(0, 4096);
         IDT = idt;
     }
-
-    unsafe {
-        let idt_desc = IDTDesc {
-            limit: 4095,
-            address: idt as u64,
-        };
-        asm!(
-            "lidt [{idt_desc}]",                    // use the newly created IDT.
-            idt_desc=in(reg) &idt_desc as *const _,
-        );
-    }
+    verbose!("IDT", "IDT at {:#016X}", idt as u64);
 
     macro_rules! isr {
         ($name:ident, $number:literal) => {
@@ -44,6 +29,28 @@ pub fn init() {
     // This file includes 256 isr!(...) macros, one for every possible interrupt.
     // So for every possible interrupt number, the respective stub will be registered to the IDT.
     include!("set_isrs.rs");
+
+    info!("IDT", "Initialized...");
+}
+
+pub fn init_core(core_id: usize) {
+    // Allocate a 16KB interrupt stack that will be used by every interrupt.
+    // This ensures that every interrupt has 16 KB stack space in every situation,
+    // but also makes nested interrupts impossible, since the two interrupts would corrupt each others
+    // stack space.
+    let int_stack = memory::phys_to_virt::<u8>(memory::phys_manager().alloc_linear_pages(4)) as u64;
+    gdt::set_ist1(core_id, int_stack + 4 * 4096);
+
+    unsafe {
+        let idt_desc = IDTDesc {
+            limit: 4095,
+            address: IDT as u64,
+        };
+        asm!(
+            "lidt [{idt_desc}]",                    // use the newly created IDT.
+            idt_desc=in(reg) &idt_desc as *const _,
+        );
+    }
 }
 
 /// Sets the low-level stub for a given interrupt index. 

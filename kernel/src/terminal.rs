@@ -3,9 +3,12 @@ use core::{ptr::null_mut, slice};
 use common_structures::{Format, KernelHeader};
 use font8x8::UnicodeFonts;
 
+use crate::mutex::{Lock, SpinLock};
+
 const MARGIN: u32 = 16;
 
 struct Info {
+    lock: SpinLock,
     framebuffer: *mut u8,
     scan_width: u32,
     height: u32,
@@ -30,6 +33,7 @@ enum Mode {
 }
 
 static mut INFO: Info = Info{
+    lock: SpinLock::new(),
     framebuffer: null_mut(),
     scan_width: 0,
     height: 0,
@@ -47,6 +51,7 @@ static mut INFO: Info = Info{
 pub fn init(kernel_header: &KernelHeader) {
     unsafe {
         INFO = Info {
+            lock: SpinLock::new(),
             framebuffer: kernel_header.screen_buffer,
             height: kernel_header.screen_height,
             rows: (kernel_header.screen_height - MARGIN * 2) / 8,
@@ -65,6 +70,7 @@ pub fn init(kernel_header: &KernelHeader) {
 
 pub fn clear() {
     let info = unsafe{&mut INFO};
+    let _guard = info.lock.lock();
 
     unsafe {
         info.framebuffer.write_bytes(0, (info.scan_width * info.height * 4) as usize);
@@ -93,7 +99,7 @@ fn new_line() {
     }
 }
 
-pub fn print_char(c: char) {
+fn print_char(c: char) {
     let info = unsafe{&mut INFO};
 
     match info.mode {
@@ -158,6 +164,9 @@ pub fn print_char(c: char) {
 }
 
 pub fn print(msg: &str) {
+    let info = unsafe{&mut INFO};
+    let _guard = info.lock.lock();
+
     for c in msg.chars() {
         print_char(c);
     }

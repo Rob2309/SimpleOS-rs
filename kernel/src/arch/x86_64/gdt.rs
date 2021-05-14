@@ -32,61 +32,76 @@ pub const SELECTOR_USER_CODE: u16 = 16 | 3;
 /// Pointer to the Task State Segment, which is mainly used to determine which stack should
 /// be used for interrupts.
 static mut TSS: *mut Tss = null_mut();
+static mut GDT: *mut GDTEntry = null_mut();
 
-pub fn init() {
+pub fn init(num_cores: usize) {
     info!("GDT", "Initializing...");
 
-    let mem = memory::phys_to_virt::<GDTEntry>(memory::phys_manager().alloc_page());
-    verbose!("GDT", "GDT at {:#016X}", mem as u64);
+    let num_tss_entries = num_cores;
+    let num_gdt_pages = ((3 + num_tss_entries * 2) * size_of::<GDTEntry>() + 4095) / 4096;
 
-    let tss_mem = memory::phys_to_virt::<Tss>(memory::phys_manager().alloc_page());
+    let mem = memory::phys_to_virt::<GDTEntry>(memory::phys_manager().alloc_linear_pages(num_gdt_pages as u64));
+    verbose!("GDT", "GDT at {:#016X} ({} entries, {} pages)", mem as u64, 3 + num_tss_entries, num_gdt_pages);
+
+    let tss_mem = memory::phys_to_virt::<Tss>(memory::phys_manager().alloc_linear_pages(((num_tss_entries * size_of::<Tss>() + 4095) / 4096) as u64));
 
     unsafe {
         mem.offset(0).write(GDTEntry::null());
         mem.offset(1).write(GDTEntry::new_code(false));
         mem.offset(2).write(GDTEntry::new_code(true));
 
-        // The TSS needs an entry in the GDT that points to the actual TSS memory.
-        // This entry takes up two GDT entry slots.
-        let tss_entry = GDTEntryTSS {
-            limit0: size_of::<Tss>() as u16 - 1,
-            base0: tss_mem as u16,
-            base1: ((tss_mem as u64) >> 16) as u8,
-            type_dpl_p: 0b10001001,
-            limi1: 0,
-            base2: ((tss_mem as u64) >> 24) as u8,
-            base3: ((tss_mem as u64) >> 32) as u32,
-            reserved: 0,
-        };
-        (mem.offset(3) as *mut GDTEntryTSS).write(tss_entry);
+        for i in 0..num_cores {
+            let tss_ptr = unsafe{tss_mem.offset(i as isize)};
 
-        let tss = Tss {
-            reserved0: 0,
-            rsp0: 0,
-            rsp1: 0,
-            rsp2: 0,
-            reserved1: 0,
-            ist1: 0,
-            ist2: 0,
-            ist3: 0,
-            ist4: 0,
-            ist5: 0,
-            ist6: 0,
-            ist7: 0,
-            reserved2: 0,
-            reserved3: 0,
-        };
-        tss_mem.write(tss);
+            // The TSS needs an entry in the GDT that points to the actual TSS memory.
+            // This entry takes up two GDT entry slots.
+            let tss_entry = GDTEntryTSS {
+                limit0: size_of::<Tss>() as u16 - 1,
+                base0: tss_ptr as u16,
+                base1: ((tss_ptr as u64) >> 16) as u8,
+                type_dpl_p: 0b10001001,
+                limi1: 0,
+                base2: ((tss_ptr as u64) >> 24) as u8,
+                base3: ((tss_ptr as u64) >> 32) as u32,
+                reserved: 0,
+            };
+            (mem.offset(3 + i as isize) as *mut GDTEntryTSS).write(tss_entry);
+
+            let tss = Tss {
+                reserved0: 0,
+                rsp0: 0,
+                rsp1: 0,
+                rsp2: 0,
+                reserved1: 0,
+                ist1: 0,
+                ist2: 0,
+                ist3: 0,
+                ist4: 0,
+                ist5: 0,
+                ist6: 0,
+                ist7: 0,
+                reserved2: 0,
+                reserved3: 0,
+            };
+            tss_mem.write(tss);
+        }
 
         TSS = tss_mem;
+        GDT = mem;
     }
+
+    info!("GDT", "Initialized");
+}
+
+pub fn init_core(core_id: usize) {
+    let limit = (5 + 2 * core_id as u16) * 8 - 1;
 
     // This structure is used by LGDT.
     // base + limit is the last *accessible* byte in the GDT, so
     // it has to be one less than the *size*.
     let desc = Gdtr {
-        base: mem as u64,
-        limit: 5 * 8 - 1,
+        base: unsafe{GDT} as u64,
+        limit,
     };
     unsafe{asm!(
         "lgdt [{desc}]",            // use the newly created GDT
@@ -110,16 +125,14 @@ pub fn init() {
     unsafe{asm!(
         "ltr {sel:x}",              // Load the selector for the GDT entry that describes the location of the TSS.
                                     // Why this indirection is needed is beyond me.
-        sel=in(reg) 3*8,
+        sel=in(reg) (3 + core_id * 2) * 8,
     )};
-
-    info!("GDT", "Initialized");
 }
 
 /// Sets the address of the stack used for most interrupts.
-pub fn set_ist1(val: u64) {
+pub fn set_ist1(core_id: usize, val: u64) {
     unsafe {
-        (*TSS).ist1 = val;
+        (*TSS.offset(core_id as isize)).ist1 = val;
     }
 }
 
