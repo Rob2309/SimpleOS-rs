@@ -2,10 +2,10 @@ use crate::memory;
 use core::mem::size_of;
 use core::ptr::null_mut;
 
+pub const SELECTOR_NULL: u16 = 0;
 pub const SELECTOR_KERNEL_CODE: u16 = 8;
-pub const SELECTOR_KERNEL_DATA: u16 = 16;
-pub const SELECTOR_USER_CODE: u16 = 24 | 3;
-pub const SELECTOR_USER_DATA: u16 = 32 | 3;
+pub const SELECTOR_USER_CODE: u16 = 16 | 3;
+pub const SELECTOR_USER_STACK: u16 = 24 | 3;
 
 static mut TSS: *mut Tss = null_mut();
 
@@ -20,9 +20,8 @@ pub fn init() {
     unsafe {
         mem.offset(0).write(GDTEntry::null());
         mem.offset(1).write(GDTEntry::new(true, false));
-        mem.offset(2).write(GDTEntry::new(false, false));
-        mem.offset(3).write(GDTEntry::new(true, true));
-        mem.offset(4).write(GDTEntry::new(false, true));
+        mem.offset(2).write(GDTEntry::new(true, true));
+        mem.offset(3).write(GDTEntry::new(false, true));
 
         let tss_entry = GDTEntryTSS {
             limit0: size_of::<Tss>() as u16 - 1,
@@ -34,7 +33,7 @@ pub fn init() {
             base3: ((tss_mem as u64) >> 32) as u32,
             reserved: 0,
         };
-        (mem.offset(5) as *mut GDTEntryTSS).write(tss_entry);
+        (mem.offset(4) as *mut GDTEntryTSS).write(tss_entry);
 
         let tss = Tss {
             reserved0: 0,
@@ -59,13 +58,13 @@ pub fn init() {
 
     let desc = Gdtr {
         base: mem as u64,
-        limit: 7 * 8 - 1,
+        limit: 6 * 8 - 1,
     };
     unsafe{asm!(
         "lgdt [{desc}]",
-        "mov ds, {kdata:x}",
-        "mov es, {kdata:x}",
-        "mov ss, {kdata:x}",
+        "mov ds, {null:x}",
+        "mov es, {null:x}",
+        "mov ss, {null:x}",
         "push {kcode}",
         "lea {tmp}, [1f + rip]",
         "push {tmp}",
@@ -73,14 +72,14 @@ pub fn init() {
         "1: nop",
 
         desc=in(reg) &desc as *const _,
-        kdata=in(reg) SELECTOR_KERNEL_DATA,
         kcode=const SELECTOR_KERNEL_CODE,
+        null=in(reg) SELECTOR_NULL,
         tmp=lateout(reg) _,
     )};
 
     unsafe{asm!(
         "ltr {sel:x}",
-        sel=in(reg) 5*8,
+        sel=in(reg) 4*8,
     )};
 
     info!("GDT", "Initialized");
