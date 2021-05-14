@@ -2,10 +2,35 @@ use crate::memory;
 use core::mem::size_of;
 use core::ptr::null_mut;
 
+/*
+    On x86_64, the GDT is basically completely useless, the only used feature is checking the privilege level of
+    the code segment. Some weird rules however don't get disabled, even though they are completely, utterly useless.
+    E.g. it is still forbidden to MOV a selector into the stack segment that has a different privilege level, even though
+    that privilege level is never actually checked afterwards. When writing to ss through an IRET though, the SS value is
+    written completely unchecked.
+
+    Since a program will never need to change CS, DS, ES and SS while running, we only ever need to change those values
+    through IRET (used when switching processes), which does not check any rules for SS, meaning we don't need any user data descriptors.
+
+    The following selectors will be used:
+    - Kernel Mode:
+        CS = SELECTOR_KERNEL_CODE
+        DS = 0
+        ES = 0
+        SS = 0
+    - User Mode:
+        CS = SELECTOR_USER_CODE
+        DS = 0
+        ES = 0
+        SS = 0
+*/
+
 pub const SELECTOR_NULL: u16 = 0;
 pub const SELECTOR_KERNEL_CODE: u16 = 8;
 pub const SELECTOR_USER_CODE: u16 = 16 | 3;
 
+/// Pointer to the Task State Segment, which is mainly used to determine which stack should
+/// be used for interrupts.
 static mut TSS: *mut Tss = null_mut();
 
 pub fn init() {
@@ -21,6 +46,8 @@ pub fn init() {
         mem.offset(1).write(GDTEntry::new_code(false));
         mem.offset(2).write(GDTEntry::new_code(true));
 
+        // The TSS needs an entry in the GDT that points to the actual TSS memory.
+        // This entry takes up two GDT entry slots.
         let tss_entry = GDTEntryTSS {
             limit0: size_of::<Tss>() as u16 - 1,
             base0: tss_mem as u16,
@@ -54,19 +81,24 @@ pub fn init() {
         TSS = tss_mem;
     }
 
+    // This structure is used by LGDT.
+    // base + limit is the last *accessible* byte in the GDT, so
+    // it has to be one less than the *size*.
     let desc = Gdtr {
         base: mem as u64,
         limit: 5 * 8 - 1,
     };
     unsafe{asm!(
-        "lgdt [{desc}]",
-        "mov ds, {null:x}",
+        "lgdt [{desc}]",            // use the newly created GDT
+        "mov ds, {null:x}",         // load every data segment register with null descriptors
         "mov es, {null:x}",
         "mov ss, {null:x}",
-        "push {kcode}",
-        "lea {tmp}, [1f + rip]",
+        "push {kcode}",             // push the kernel code selector
+        "lea {tmp}, [1f + rip]",    // find out the absolute address of the 1: label below
         "push {tmp}",
-        "retfq",
+        "retfq",                    // RETF pops off the new RIP and CS from the stack and uses them.
+                                    // This is needed because directly writing to the CS segment register is
+                                    // impossible.
         "1: nop",
 
         desc=in(reg) &desc as *const _,
@@ -76,13 +108,15 @@ pub fn init() {
     )};
 
     unsafe{asm!(
-        "ltr {sel:x}",
+        "ltr {sel:x}",              // Load the selector for the GDT entry that describes the location of the TSS.
+                                    // Why this indirection is needed is beyond me.
         sel=in(reg) 3*8,
     )};
 
     info!("GDT", "Initialized");
 }
 
+/// Sets the address of the stack used for most interrupts.
 pub fn set_ist1(val: u64) {
     unsafe {
         (*TSS).ist1 = val;
